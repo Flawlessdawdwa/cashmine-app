@@ -29,5 +29,5 @@ All in `ai-logs/` (full Claude Code session transcript).
 - Not tested on a physical phone, only in a phone-sized browser viewport.
 - The overlay subtracts a claim from `available` even if that snapshot is older than a reversal; in extreme cases displayed available could briefly be off until the next snapshot (clamped at 0).
 - Claim history across devices relies on Activity. Tracked in-flight claims are per browser.
-- No component or end-to-end tests: unit tests cover amounts and the overlay only. Next, I'd add integration tests for the claim engine with a mocked fetch (timeout → resend with the same key).
+- No component or end-to-end tests. Unit tests cover amounts, the balance overlay and the claim engine (timeout → resend with the same key, 4xx stops, 429 waits).
 - Activity uses "Load more" rather than infinite scroll, which is deliberate for predictable paging on flaky networks.

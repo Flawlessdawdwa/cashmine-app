@@ -20,6 +20,6 @@ The API base URL is in `src/lib/config.ts`.
 - **Balances (Home):** each asset's available, pending and claiming amounts, USD values and totals, and data freshness from `asOf`. It has loading, error/retry, stale-data and refresh states (button, pull to refresh, and auto-refresh every 15s).
 - **Claim:** pick an asset, enter an amount or tap Max, then see validation against the API rules (min, available, decimals, wire format), the fee, the amount you receive and the destination. Then confirm and follow the claim through to completed or failed. Timeouts are resent safely with the same Idempotency-Key, and work continues after a reload.
 - **Activity:** paginated history of accruals, reversals and claims.
-- **Tests:** `src/lib/money.test.ts`, `src/lib/overlay.test.ts`.
+- **Tests:** `src/lib/money.test.ts`, `src/lib/overlay.test.ts`, `src/state/claimEngine.test.ts` (23 tests).
 
 Stack: Expo SDK 58, TypeScript, Zustand + MMKV (persisted state), TanStack React Query (server state). See [NOTES.md](NOTES.md) for decisions.
