@@ -13,6 +13,16 @@ export const zustandStorage: StateStorage = {
   },
 };
 
+/** Short non-secret fingerprint (FNV-1a) of the token, so stored claims can be tied to it without storing it twice. */
+export function tokenTag(token: string | null): string {
+  let h = 0x811c9dc5;
+  for (const ch of token ?? '') {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16);
+}
+
 export function newIdempotencyKey(): string {
   const c = globalThis.crypto;
   if (c?.randomUUID) return c.randomUUID();

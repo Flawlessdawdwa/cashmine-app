@@ -4,7 +4,7 @@ import { useDisplayBalances } from '../hooks/useClaims';
 import { ApiError } from '../lib/api';
 import { formatUnits, formatUsd, usdValue } from '../lib/money';
 import type { DisplayBalance } from '../lib/overlay';
-import { isPending, isUnresolved, useClaimsStore } from '../state/claimsStore';
+import { useMyAttempts } from '../state/claimsStore';
 import { Banner, Button, Card, Row, colors, styles } from '../components/ui';
 import type { Nav } from '../navigation';
 
@@ -16,7 +16,7 @@ function ago(ms: number) {
 }
 
 function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(id);
@@ -26,9 +26,8 @@ function useNow(intervalMs = 1000) {
 
 export function HomeScreen({ nav }: { nav: Nav }) {
   const q = useDisplayBalances();
-  const attempts = useClaimsStore((s) => s.attempts);
+  const active = useMyAttempts();
   const now = useNow();
-  const active = attempts.filter((a) => isUnresolved(a) || isPending(a) || a.state === 'rejected' || a.state === 'created');
 
   const authError = q.error instanceof ApiError && q.error.status === 401;
   const ageMs = q.data ? now - Date.parse(q.data.asOf) : 0;
@@ -62,7 +61,7 @@ export function HomeScreen({ nav }: { nav: Nav }) {
         </Banner>
       ) : q.error && !q.data ? (
         <Card>
-          <Text style={[styles.h2, { marginBottom: 6 }]}>Couldn't load balances</Text>
+          <Text style={[styles.h2, { marginBottom: 6 }]}>Couldn’t load balances</Text>
           <Text style={[styles.muted, { marginBottom: 12 }]}>{q.error.message}</Text>
           <Button title="Try again" loading={q.isFetching} onPress={() => q.refetch()} />
         </Card>

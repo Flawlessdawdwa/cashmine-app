@@ -8,6 +8,7 @@ const snapshot = (asOf: string, available: string, claiming = '0'): Balances => 
 
 const attempt = (createdAt: string, status: Claim['status'], amount = '100'): ClaimAttempt => ({
   key: 'k1',
+  owner: 'o',
   body: { asset: 'USDT', amount, destinationId: 'd' },
   decimals: 6,
   state: 'created',

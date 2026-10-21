@@ -1,6 +1,6 @@
 import { api, ApiError, type ClaimBody } from '../lib/api';
 import { queryClient, queryKeys } from '../hooks/queries';
-import { useClaimsStore } from './claimsStore';
+import { currentOwner, useClaimsStore } from './claimsStore';
 
 // Sending a claim lives outside React on purpose: it must keep going when the
 // user navigates away, and resume after a reload (attempts are persisted).
@@ -9,8 +9,8 @@ const running = new Set<string>();
 const wakers = new Map<string, () => void>();
 const MAX_BACKOFF_MS = 15_000;
 
-/** A backoff sleep that "Check now" can cut short. */
-function sleep(key: string, ms: number) {
+/** A backoff sleep; "Check now" can cut it short unless it's a server-requested 429 wait. */
+function sleep(key: string, ms: number, wakeable = true) {
   return new Promise<void>((resolve) => {
     const t = setTimeout(done, ms);
     function done() {
@@ -18,7 +18,7 @@ function sleep(key: string, ms: number) {
       wakers.delete(key);
       resolve();
     }
-    wakers.set(key, done);
+    if (wakeable) wakers.set(key, done);
   });
 }
 
@@ -38,6 +38,9 @@ export async function runAttempt(key: string) {
     for (;;) {
       const a = useClaimsStore.getState().attempts.find((x) => x.key === key);
       if (!a || a.state === 'created' || a.state === 'rejected') return;
+      // Never send one account's claim with another account's token.
+      if (a.owner !== currentOwner()) return;
+      if (a.stalled) useClaimsStore.getState().updateAttempt(key, { stalled: false });
       try {
         const claim = await api.createClaim(a.body, a.key);
         useClaimsStore.getState().updateAttempt(key, { state: 'created', claim, error: undefined });
@@ -47,7 +50,7 @@ export async function runAttempt(key: string) {
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(String(e), null, 'UNKNOWN', true);
         if (err.code === 'RATE_LIMITED') {
-          await sleep(key, err.retryAfterMs ?? 1_000);
+          await sleep(key, err.retryAfterMs ?? 1_000, false);
         } else if (err.outcomeUnknown) {
           useClaimsStore.getState().updateAttempt(key, { state: 'unknown', error: err.message, stalled: false });
           await sleep(key, delay);
@@ -78,8 +81,9 @@ export function submitClaim(body: ClaimBody, decimals: number): string {
 
 /** On startup: resend anything whose outcome we never learned. */
 export function resumeUnresolvedAttempts() {
+  const owner = currentOwner();
   for (const a of useClaimsStore.getState().attempts) {
-    if (a.state === 'submitting' || a.state === 'unknown') {
+    if (a.owner === owner && (a.state === 'submitting' || a.state === 'unknown')) {
       // A request in flight when the page closed may have reached the server.
       useClaimsStore.getState().updateAttempt(a.key, { state: 'unknown' });
       runAttempt(a.key);

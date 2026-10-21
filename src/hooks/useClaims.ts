@@ -1,14 +1,13 @@
 import { useEffect, useMemo } from 'react';
 import { displayBalances, totalsUsd } from '../lib/overlay';
 import { useAuthStore } from '../state/authStore';
-import { isPending, isUnresolved, useClaimsStore } from '../state/claimsStore';
-import { resumeUnresolvedAttempts } from '../state/claimEngine';
+import { isPending, isUnresolved, useClaimsStore, useMyAttempts } from '../state/claimsStore';
 import { queryClient, queryKeys, useBalances, useClaimStatus } from './queries';
 
 /** Server snapshot merged with our own claims it doesn't include yet (see lib/overlay.ts). */
 export function useDisplayBalances() {
   const query = useBalances();
-  const attempts = useClaimsStore((s) => s.attempts);
+  const attempts = useMyAttempts();
   const derived = useMemo(() => {
     if (!query.data) return { rows: null, totals: null, dataError: null };
     try {
@@ -36,14 +35,14 @@ export function useWatchClaim(claimId: string | undefined) {
 }
 
 export function usePendingClaimIds() {
-  const attempts = useClaimsStore((s) => s.attempts);
+  const attempts = useMyAttempts();
   return useMemo(() => attempts.filter(isPending).map((a) => a.claim!.id), [attempts]);
 }
 
 /** Forget settled claims once a balance snapshot is well past their settlement. */
 export function usePruneSettledClaims() {
   const { data } = useBalances();
-  const attempts = useClaimsStore((s) => s.attempts);
+  const attempts = useMyAttempts();
   const removeAttempt = useClaimsStore((s) => s.removeAttempt);
   useEffect(() => {
     if (!data) return;
@@ -57,15 +56,14 @@ export function usePruneSettledClaims() {
 }
 
 /**
- * Switching token drops the previous token's cached data. Claims we can't yet prove are
- * settled (pending, or stalled after an unknown outcome) are kept and resumed with the new
- * token, never wiped: wiping would unlock the asset and allow a duplicate. Blocked only while
- * a resend is actively retrying.
+ * Switching token drops cached server data. Claims not yet proven settled (pending, or unknown)
+ * are kept, tagged with their own token, and become active again only if that token comes back:
+ * wiping them could allow a duplicate. Blocked while a resend is actively retrying.
  */
 export function useChangeToken() {
   const current = useAuthStore((s) => s.token);
   const setToken = useAuthStore((s) => s.setToken);
-  const attempts = useClaimsStore((s) => s.attempts);
+  const attempts = useMyAttempts();
   const blocked = attempts.some((a) => isUnresolved(a) && !a.stalled);
   const change = (token: string | null): boolean => {
     const clean = token?.trim() || null;
@@ -74,8 +72,7 @@ export function useChangeToken() {
     const { attempts: all, removeAttempt } = useClaimsStore.getState();
     for (const a of all) if (!isPending(a) && !isUnresolved(a)) removeAttempt(a.key);
     queryClient.clear();
-    setToken(clean);
-    if (clean) resumeUnresolvedAttempts();
+    setToken(clean); // BackgroundClaims remounts per token and resumes that token's attempts
     return true;
   };
   return { change, blocked };

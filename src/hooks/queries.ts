@@ -67,7 +67,12 @@ export function useClaimStatus(id: string | undefined) {
     queryKey: [...queryKeys.claim(id ?? ''), token],
     enabled: !!token && !!id,
     queryFn: () => api.getClaim(id!),
-    refetchInterval: (q) => (q.state.data && q.state.data.status !== 'pending' ? false : CLAIM_POLL_MS),
+    refetchInterval: (q) => {
+      if (q.state.data && q.state.data.status !== 'pending') return false;
+      const e = q.state.error;
+      if (e instanceof ApiError && !e.outcomeUnknown && e.code !== 'RATE_LIMITED') return false; // 401/404: polling can't help
+      return CLAIM_POLL_MS;
+    },
     refetchIntervalInBackground: true,
   });
 }

@@ -8,6 +8,7 @@ export const colors = {
   text: '#F2F4F7',
   muted: '#8A94A6',
   accent: '#3DDC97',
+  accentSoft: '#3DDC9722',
   accentText: '#062417',
   warn: '#F5B14C',
   danger: '#FF6B6B',
@@ -50,6 +51,24 @@ export function Banner({ tone, children }: { tone: 'warn' | 'danger' | 'info'; c
     <View style={[styles.banner, { borderColor: c }]}>
       {typeof children === 'string' ? <Text style={[styles.bannerText, { color: c }]}>{children}</Text> : children}
     </View>
+  );
+}
+
+/** Load error: a 401 can only be fixed with a new token, anything else gets a retry. */
+export function ErrorCard({ title, error, onRetry, retrying, onChangeToken }: {
+  title: string; error: Error; onRetry: () => void; retrying: boolean; onChangeToken: () => void;
+}) {
+  const unauthorized = (error as { status?: number }).status === 401;
+  return (
+    <Card>
+      <Text style={[styles.h2, { marginBottom: 6 }]}>{unauthorized ? 'Your token is invalid or expired' : title}</Text>
+      {unauthorized ? null : <Text style={[styles.muted, { marginBottom: 12 }]}>{error.message}</Text>}
+      {unauthorized ? (
+        <Button title="Change token" onPress={onChangeToken} />
+      ) : (
+        <Button title="Try again" loading={retrying} onPress={onRetry} />
+      )}
+    </Card>
   );
 }
 

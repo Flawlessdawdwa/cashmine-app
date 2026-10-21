@@ -1,7 +1,7 @@
 import { ActivityIndicator, FlatList, Text, View } from 'react-native';
 import { useActivity } from '../hooks/queries';
 import type { ActivityItem } from '../lib/api';
-import { Button, Card, Header, colors, styles } from '../components/ui';
+import { Banner, Button, ErrorCard, Header, colors, styles } from '../components/ui';
 import type { Nav } from '../navigation';
 
 const TYPE_LABEL = { accrual: 'Payback', reversal: 'Reversal', claim: 'Claim' } as const;
@@ -16,10 +16,13 @@ export function ActivityScreen({ nav }: { nav: Nav }) {
       {q.isPending ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       ) : q.error && !q.data ? (
-        <Card>
-          <Text style={[styles.muted, { marginBottom: 12 }]}>Couldn't load activity: {q.error.message}</Text>
-          <Button title="Try again" loading={q.isFetching} onPress={() => q.refetch()} />
-        </Card>
+        <ErrorCard
+          title="Couldn’t load activity"
+          error={q.error}
+          retrying={q.isFetching}
+          onRetry={() => q.refetch()}
+          onChangeToken={() => nav.go({ name: 'token' })}
+        />
       ) : (
         <FlatList
           showsVerticalScrollIndicator={false}
@@ -28,14 +31,17 @@ export function ActivityScreen({ nav }: { nav: Nav }) {
           renderItem={({ item }) => <ActivityRow item={item} />}
           onRefresh={() => { q.refetch(); }}
           refreshing={q.isRefetching && !q.isFetchingNextPage}
+          ListHeaderComponent={
+            q.isRefetchError ? <Banner tone="warn">{`Couldn’t refresh (${q.error?.message}). Showing earlier results.`}</Banner> : undefined
+          }
           ListEmptyComponent={<Text style={[styles.muted, { textAlign: 'center', marginTop: 24 }]}>No activity yet.</Text>}
           ListFooterComponent={
             <View style={{ paddingVertical: 16 }}>
-              {q.isFetchNextPageError ? <Text style={[styles.error, { marginBottom: 8 }]}>Couldn't load more.</Text> : null}
+              {q.isFetchNextPageError ? <Text style={[styles.error, { marginBottom: 8 }]}>Couldn’t load more.</Text> : null}
               {q.hasNextPage ? (
                 <Button title="Load more" variant="secondary" loading={q.isFetchingNextPage} onPress={() => q.fetchNextPage()} />
               ) : items.length > 0 ? (
-                <Text style={[styles.muted, { textAlign: 'center' }]}>That's everything.</Text>
+                <Text style={[styles.muted, { textAlign: 'center' }]}>That’s everything.</Text>
               ) : null}
             </View>
           }

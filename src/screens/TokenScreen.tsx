@@ -13,7 +13,7 @@ export function TokenScreen({ onDone }: { onDone?: () => void }) {
       <View style={{ height: 16 }} />
       <Header title="API token" onBack={token ? onDone : undefined} />
       {token && blocked ? (
-        <Banner tone="warn">We're still confirming a claim. Wait a few seconds before changing or removing the token.</Banner>
+        <Banner tone="warn">We’re still confirming a claim. Wait a few seconds before changing or removing the token.</Banner>
       ) : null}
       <Card>
         <Text style={[styles.text, { marginBottom: 12, lineHeight: 21 }]}>

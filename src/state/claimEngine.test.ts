@@ -1,5 +1,6 @@
 import { ApiError, api, type Claim } from '../lib/api';
 import { resumeUnresolvedAttempts, runAttempt, submitClaim } from './claimEngine';
+import { useAuthStore } from './authStore';
 import { useClaimsStore } from './claimsStore';
 
 jest.mock('../lib/storage', () => {
@@ -12,6 +13,7 @@ jest.mock('../lib/storage', () => {
       removeItem: (k: string) => mem.delete(k),
     },
     newIdempotencyKey: () => `key-${++n}`,
+    tokenTag: (t: string | null) => `tag:${t}`,
   };
 });
 jest.mock('../hooks/queries', () => ({
@@ -29,7 +31,8 @@ const timeout = () => new ApiError('timed out', 504, 'TIMEOUT', true);
 let createClaim: jest.SpyInstance;
 beforeEach(() => {
   jest.useFakeTimers();
-  useClaimsStore.getState().clear();
+  useClaimsStore.setState({ attempts: [] });
+  useAuthStore.setState({ token: 'token-A' });
   createClaim = jest.spyOn(api, 'createClaim');
 });
 afterEach(() => {
@@ -106,4 +109,17 @@ it('an attempt still "submitting" when the page closed resumes as unknown', asyn
   expect(createClaim).toHaveBeenCalledWith(body, key);
   expect(attempt(key).state).toBe('unknown');
   expect(attempt(key).stalled).toBe(true);
+});
+
+it("never sends another account's claim with the current token", async () => {
+  createClaim.mockRejectedValueOnce(timeout());
+  const key = submitClaim(body, 6); // owned by token-A
+  await jest.advanceTimersByTimeAsync(0);
+  expect(attempt(key).state).toBe('unknown');
+  useAuthStore.setState({ token: 'token-B' });
+  await jest.advanceTimersByTimeAsync(30_000);
+  resumeUnresolvedAttempts();
+  await jest.advanceTimersByTimeAsync(30_000);
+  expect(createClaim).toHaveBeenCalledTimes(1); // only the original send, under token-A
+  expect(attempt(key).state).toBe('unknown'); // kept, inactive until token-A returns
 });

@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useClaimOptions } from '../hooks/queries';
 import { useDisplayBalances } from '../hooks/useClaims';
-import { formatUnits, parseApiAmount, validateClaim } from '../lib/money';
+import { formatUnits, parseApiAmount, validateClaim, type ClaimRules } from '../lib/money';
 import { submitClaim } from '../state/claimEngine';
-import { Banner, Button, Card, Header, Row, colors, styles } from '../components/ui';
+import { Banner, Button, Card, ErrorCard, Header, Row, colors, styles } from '../components/ui';
 import type { Nav } from '../navigation';
 
 export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: string }) {
@@ -21,19 +21,20 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
   const d = row?.decimals ?? 0;
   const fmt = (u: bigint) => formatUnits(u, d);
 
-  const rules = useMemo(() => {
-    if (!row || !options.data) return null;
+  // Cheap (two string parses), so no memo.
+  let rules: ClaimRules | null = null;
+  if (row && options.data) {
     try {
-      return {
+      rules = {
         decimals: row.decimals,
         minAmount: parseApiAmount(options.data.minAmount, row.decimals),
         fee: parseApiAmount(options.data.fee, row.decimals),
         available: row.available,
       };
     } catch {
-      return null;
+      rules = null; // malformed API amount: rendered as "can't be claimed right now"
     }
-  }, [row, options.data]);
+  }
 
   const result = rules ? validateClaim(input, rules) : null;
   const dest = options.data?.destinations.find((x) => x.id === destinationId) ?? options.data?.destinations[0];
@@ -46,7 +47,7 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
   };
 
   const confirm = () => {
-    if (submitting.current || !result?.ok || !dest || !row) return;
+    if (submitting.current || !result?.ok || !dest || !row || row.unresolved) return;
     submitting.current = true; // guards a double tap before the re-render
     const key = submitClaim({ asset, amount: formatUnits(result.amount, d), destinationId: dest.id }, d);
     nav.reset({ name: 'claimStatus', key });
@@ -87,7 +88,7 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
             style={{
               paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
               borderColor: r.asset === asset ? colors.accent : colors.border,
-              backgroundColor: r.asset === asset ? '#3DDC9722' : 'transparent',
+              backgroundColor: r.asset === asset ? colors.accentSoft : 'transparent',
               opacity: r.unresolved ? 0.4 : 1,
             }}
           >
@@ -96,17 +97,28 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
         ))}
       </View>
 
-      {row?.unresolved ? <Banner tone="warn">We're still confirming an earlier claim for this asset. Wait for it before claiming again.</Banner> : null}
+      {row?.unresolved ? <Banner tone="warn">We’re still confirming an earlier claim for this asset. Wait for it before claiming again.</Banner> : null}
 
-      {options.isPending || balances.isPending ? (
-        <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
+      {balances.error && !balances.data ? (
+        <ErrorCard
+          title="Couldn’t load balances"
+          error={balances.error}
+          retrying={balances.isFetching}
+          onRetry={() => balances.refetch()}
+          onChangeToken={() => nav.go({ name: 'token' })}
+        />
       ) : options.error ? (
-        <Card>
-          <Text style={[styles.muted, { marginBottom: 12 }]}>Couldn't load claim options: {options.error.message}</Text>
-          <Button title="Try again" loading={options.isFetching} onPress={() => options.refetch()} />
-        </Card>
+        <ErrorCard
+          title="Couldn’t load claim options"
+          error={options.error}
+          retrying={options.isFetching}
+          onRetry={() => options.refetch()}
+          onChangeToken={() => nav.go({ name: 'token' })}
+        />
+      ) : options.isPending || balances.isPending ? (
+        <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       ) : !row || !rules ? (
-        <Banner tone="danger">This asset can't be claimed right now.</Banner>
+        <Banner tone="danger">This asset can’t be claimed right now.</Banner>
       ) : (
         <>
           <Card>

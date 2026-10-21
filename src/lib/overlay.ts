@@ -11,6 +11,8 @@ import { addDecimals, parseApiAmount, usdValue, type Decimal } from './money';
  */
 export type ClaimAttempt = {
   key: string;
+  /** tokenTag() of the token that made it; attempts from another token are ignored */
+  owner: string;
   body: ClaimBody;
   decimals: number;
   state: 'submitting' | 'unknown' | 'created' | 'rejected';
