@@ -1,6 +1,6 @@
 # CashMine payback (Expo web)
 
-**Live:** _TBD_
+**Live:** https://flawlessdude-cashmine-app.expo.app
 
 Open it on a phone, paste your API token on first launch (stored only in this browser, changeable via **Token**).
 

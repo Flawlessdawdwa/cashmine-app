@@ -20,6 +20,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "775407d9-16bb-4391-b8b2-5598cb025c71"
+      }
+    },
+    "owner": "flawlessdude"
   }
 }
