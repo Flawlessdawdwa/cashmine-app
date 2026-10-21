@@ -103,21 +103,8 @@ async function request<T>(method: 'GET' | 'POST', path: string, opts: { body?: u
   throw new ApiError(err.message ?? `HTTP ${res.status}`, res.status, err.code ?? (unknown ? 'SERVER' : 'HTTP'), unknown, err.field, retryAfterMs);
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** GETs are safe to repeat: retry 429 (honouring retryAfterMs) and transient failures a couple of times. */
-async function get<T>(path: string, attempts = 3): Promise<T> {
-  for (let i = 0; ; i++) {
-    try {
-      return await request<T>('GET', path);
-    } catch (e) {
-      if (!(e instanceof ApiError) || i >= attempts - 1) throw e;
-      if (e.code === 'RATE_LIMITED') await sleep(e.retryAfterMs ?? 1000);
-      else if (e.outcomeUnknown) await sleep(500 * 2 ** i);
-      else throw e;
-    }
-  }
-}
+/** Retries for GETs are handled by React Query (see hooks/queries.ts). */
+const get = <T,>(path: string) => request<T>('GET', path);
 
 export const api = {
   balances: () => get<Balances>('/v1/balances'),
