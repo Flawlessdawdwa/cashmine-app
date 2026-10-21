@@ -10,6 +10,7 @@ export function TokenScreen({ onDone }: { onDone?: () => void }) {
   const [value, setValue] = useState('');
   return (
     <View>
+      <View style={{ height: 16 }} />
       <Header title="API token" onBack={token ? onDone : undefined} />
       <Card>
         <Text style={[styles.text, { marginBottom: 12, lineHeight: 21 }]}>
