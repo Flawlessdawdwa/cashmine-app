@@ -16,6 +16,8 @@ export type ClaimAttempt = {
   state: 'submitting' | 'unknown' | 'created' | 'rejected';
   claim?: Claim;
   error?: string;
+  /** unknown, and resending stopped (a 4xx after an unknown outcome): the user must check Activity */
+  stalled?: boolean;
   startedAt: string;
 };
 

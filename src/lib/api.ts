@@ -69,8 +69,10 @@ export function setApiToken(t: string | null) {
 
 async function request<T>(method: 'GET' | 'POST', path: string, opts: { body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
   const controller = new AbortController();
+  // The timer covers reading the body too: a 201 whose body never arrives is still "outcome unknown".
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   let res: Response;
+  let json: unknown;
   try {
     res = await fetch(API_BASE_URL + path, {
       method,
@@ -82,24 +84,27 @@ async function request<T>(method: 'GET' | 'POST', path: string, opts: { body?: u
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });
-  } catch (e) {
+    try {
+      json = await res.json();
+    } catch (e) {
+      if (res.ok || controller.signal.aborted) throw e;
+      json = null; // non-JSON error body (e.g. a proxy page); fall back to status
+    }
+  } catch {
     const timedOut = controller.signal.aborted;
     throw new ApiError(timedOut ? 'The request timed out' : 'Network error. Check your connection', null, timedOut ? 'TIMEOUT' : 'NETWORK', true);
   } finally {
     clearTimeout(timer);
   }
 
-  if (res.ok) return (await res.json()) as T;
+  if (res.ok) return json as T;
 
-  let err: { code?: string; message?: string; field?: string; retryAfterMs?: number } = {};
-  try {
-    err = (await res.json()).error ?? {};
-  } catch {
-    // non-JSON error body (e.g. a proxy page); fall back to status
-  }
+  type ErrorBody = { error?: { code?: string; message?: string; field?: string; retryAfterMs?: number } };
+  const err = (json as ErrorBody | null)?.error ?? {};
   const retryAfterHeader = Number(res.headers.get('Retry-After'));
   const retryAfterMs = err.retryAfterMs ?? (retryAfterHeader > 0 ? retryAfterHeader * 1000 : undefined);
-  const unknown = res.status >= 500;
+  // 408 (request timeout) is as ambiguous as a 5xx: the server may have acted.
+  const unknown = res.status >= 500 || res.status === 408;
   throw new ApiError(err.message ?? `HTTP ${res.status}`, res.status, err.code ?? (unknown ? 'SERVER' : 'HTTP'), unknown, err.field, retryAfterMs);
 }
 

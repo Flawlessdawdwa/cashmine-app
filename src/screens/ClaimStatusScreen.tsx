@@ -21,7 +21,7 @@ export function ClaimStatusScreen({ nav, attemptKey }: { nav: Nav; attemptKey: s
   const status = c?.status;
 
   return (
-    <ScrollView>
+    <ScrollView showsVerticalScrollIndicator={false}>
       <Header title="Claim status" onBack={() => nav.reset({ name: 'home' })} />
 
       <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
@@ -35,7 +35,9 @@ export function ClaimStatusScreen({ nav, attemptKey }: { nav: Nav; attemptKey: s
           {status === 'failed' && 'Claim failed'}
         </Text>
         <Text style={[styles.muted, { marginTop: 8, textAlign: 'center', lineHeight: 20 }]}>
-          {a.state === 'unknown' &&
+          {a.state === 'unknown' && a.stalled &&
+            `We couldn't confirm whether this claim went through (server said: ${a.error}). It may have. Check Activity for a ${a.body.amount} ${a.body.asset} claim before claiming again.`}
+          {a.state === 'unknown' && !a.stalled &&
             `The connection dropped or the server timed out (${a.error}). Your claim may or may not have gone through. We keep checking automatically using the same request, so it can't be submitted twice. Don't claim this again.`}
           {a.state === 'rejected' && `Nothing was claimed. ${a.error ?? ''}`}
           {status === 'pending' && 'Usually settles within about 20 seconds. You can leave this screen.'}
@@ -54,6 +56,18 @@ export function ClaimStatusScreen({ nav, attemptKey }: { nav: Nav; attemptKey: s
       {a.state === 'unknown' ? (
         <>
           <Button title="Check now" variant="secondary" onPress={() => runAttempt(a.key)} />
+          <View style={{ height: 8 }} />
+        </>
+      ) : null}
+      {a.state === 'unknown' && a.stalled ? (
+        <>
+          <Button title="Open Activity" variant="secondary" onPress={() => nav.go({ name: 'activity' })} />
+          <View style={{ height: 8 }} />
+          <Button
+            title="I've checked Activity, unlock claiming"
+            variant="ghost"
+            onPress={() => { removeAttempt(a.key); nav.reset({ name: 'home' }); }}
+          />
           <View style={{ height: 8 }} />
         </>
       ) : null}

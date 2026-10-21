@@ -6,8 +6,21 @@ import { useClaimsStore } from './claimsStore';
 // user navigates away, and resume after a reload (attempts are persisted).
 
 const running = new Set<string>();
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const wakers = new Map<string, () => void>();
 const MAX_BACKOFF_MS = 15_000;
+
+/** A backoff sleep that "Check now" can cut short. */
+function sleep(key: string, ms: number) {
+  return new Promise<void>((resolve) => {
+    const t = setTimeout(done, ms);
+    function done() {
+      clearTimeout(t);
+      wakers.delete(key);
+      resolve();
+    }
+    wakers.set(key, done);
+  });
+}
 
 /**
  * Send (or resend) an attempt until we know the outcome. Always the same
@@ -15,7 +28,10 @@ const MAX_BACKOFF_MS = 15_000;
  * original claim (200 Idempotent-Replayed), never create a second one.
  */
 export async function runAttempt(key: string) {
-  if (running.has(key)) return;
+  if (running.has(key)) {
+    wakers.get(key)?.(); // already running: skip the rest of the current backoff
+    return;
+  }
   running.add(key);
   try {
     let delay = 1_000;
@@ -31,16 +47,20 @@ export async function runAttempt(key: string) {
       } catch (e) {
         const err = e instanceof ApiError ? e : new ApiError(String(e), null, 'UNKNOWN', true);
         if (err.code === 'RATE_LIMITED') {
-          await sleep(err.retryAfterMs ?? 1_000);
+          await sleep(key, err.retryAfterMs ?? 1_000);
         } else if (err.outcomeUnknown) {
-          useClaimsStore.getState().updateAttempt(key, { state: 'unknown', error: err.message });
-          await sleep(delay);
+          useClaimsStore.getState().updateAttempt(key, { state: 'unknown', error: err.message, stalled: false });
+          await sleep(key, delay);
           delay = Math.min(delay * 2, MAX_BACKOFF_MS);
+        } else if (a.state === 'unknown') {
+          // A 4xx on a RESEND doesn't prove the first request failed (e.g. token expired, or
+          // available is now lower because the first one did go through). Stay unknown and locked.
+          useClaimsStore.getState().updateAttempt(key, { error: err.message, stalled: true });
+          return;
         } else {
-          // Definite 4xx: nothing was created.
+          // 4xx on the first send: the server refused, nothing was created.
           useClaimsStore.getState().updateAttempt(key, { state: 'rejected', error: err.message });
           if (err.code === 'VALIDATION') queryClient.invalidateQueries({ queryKey: queryKeys.balances });
-          if (err.status === 401) return;
           return;
         }
       }
@@ -59,6 +79,10 @@ export function submitClaim(body: ClaimBody, decimals: number): string {
 /** On startup: resend anything whose outcome we never learned. */
 export function resumeUnresolvedAttempts() {
   for (const a of useClaimsStore.getState().attempts) {
-    if (a.state === 'submitting' || a.state === 'unknown') runAttempt(a.key);
+    if (a.state === 'submitting' || a.state === 'unknown') {
+      // A request in flight when the page closed may have reached the server.
+      useClaimsStore.getState().updateAttempt(a.key, { state: 'unknown' });
+      runAttempt(a.key);
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { ApiError, api, type Claim } from '../lib/api';
-import { runAttempt, submitClaim } from './claimEngine';
+import { resumeUnresolvedAttempts, runAttempt, submitClaim } from './claimEngine';
 import { useClaimsStore } from './claimsStore';
 
 jest.mock('../lib/storage', () => {
@@ -84,4 +84,26 @@ it('a second runAttempt while one is in flight does not send twice', async () =>
   resolve(claim);
   await jest.advanceTimersByTimeAsync(0);
   expect(createClaim).toHaveBeenCalledTimes(1);
+});
+
+it('a 4xx on a RESEND after an unknown outcome stays unknown (stalled), never "rejected"', async () => {
+  createClaim
+    .mockRejectedValueOnce(timeout())
+    .mockRejectedValueOnce(new ApiError('Token expired', 401, 'UNAUTHORIZED', false));
+  const key = submitClaim(body, 6);
+  await jest.advanceTimersByTimeAsync(1_000);
+  expect(createClaim).toHaveBeenCalledTimes(2);
+  expect(attempt(key).state).toBe('unknown');
+  expect(attempt(key).stalled).toBe(true);
+});
+
+it('an attempt still "submitting" when the page closed resumes as unknown', async () => {
+  // persisted state after a reload: the request was in flight, no loop is running now
+  const { key } = useClaimsStore.getState().addAttempt(body, 6);
+  createClaim.mockRejectedValueOnce(new ApiError('amount exceeds available', 400, 'VALIDATION', false));
+  resumeUnresolvedAttempts();
+  await jest.advanceTimersByTimeAsync(0);
+  expect(createClaim).toHaveBeenCalledWith(body, key);
+  expect(attempt(key).state).toBe('unknown');
+  expect(attempt(key).stalled).toBe(true);
 });

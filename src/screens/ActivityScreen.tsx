@@ -22,6 +22,7 @@ export function ActivityScreen({ nav }: { nav: Nav }) {
         </Card>
       ) : (
         <FlatList
+          showsVerticalScrollIndicator={false}
           data={items}
           keyExtractor={(i) => i.id}
           renderItem={({ item }) => <ActivityRow item={item} />}

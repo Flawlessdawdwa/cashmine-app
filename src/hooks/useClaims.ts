@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import { displayBalances, totalsUsd } from '../lib/overlay';
 import { useAuthStore } from '../state/authStore';
-import { isPending, useClaimsStore } from '../state/claimsStore';
+import { isPending, isUnresolved, useClaimsStore } from '../state/claimsStore';
+import { resumeUnresolvedAttempts } from '../state/claimEngine';
 import { queryClient, queryKeys, useBalances, useClaimStatus } from './queries';
 
 /** Server snapshot merged with our own claims it doesn't include yet (see lib/overlay.ts). */
@@ -55,13 +56,27 @@ export function usePruneSettledClaims() {
   }, [data, attempts, removeAttempt]);
 }
 
-/** Switching token: drop the previous user's cached data and claims. */
+/**
+ * Switching token drops the previous token's cached data. Claims we can't yet prove are
+ * settled (pending, or stalled after an unknown outcome) are kept and resumed with the new
+ * token, never wiped: wiping would unlock the asset and allow a duplicate. Blocked only while
+ * a resend is actively retrying.
+ */
 export function useChangeToken() {
+  const current = useAuthStore((s) => s.token);
   const setToken = useAuthStore((s) => s.setToken);
-  const clear = useClaimsStore((s) => s.clear);
-  return (token: string | null) => {
-    clear();
+  const attempts = useClaimsStore((s) => s.attempts);
+  const blocked = attempts.some((a) => isUnresolved(a) && !a.stalled);
+  const change = (token: string | null): boolean => {
+    const clean = token?.trim() || null;
+    if (clean === current) return true;
+    if (blocked) return false;
+    const { attempts: all, removeAttempt } = useClaimsStore.getState();
+    for (const a of all) if (!isPending(a) && !isUnresolved(a)) removeAttempt(a.key);
     queryClient.clear();
-    setToken(token);
+    setToken(clean);
+    if (clean) resumeUnresolvedAttempts();
+    return true;
   };
+  return { change, blocked };
 }

@@ -54,7 +54,7 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
 
   if (step === 'review' && result?.ok && dest) {
     return (
-      <ScrollView>
+      <ScrollView showsVerticalScrollIndicator={false}>
         <Header title="Confirm claim" onBack={() => setStep('edit')} />
         <Card>
           <Row label="Claim" value={`${fmt(result.amount)} ${asset}`} />
@@ -74,7 +74,7 @@ export function ClaimScreen({ nav, initialAsset }: { nav: Nav; initialAsset: str
   const claimable = balances.rows?.filter((r) => r.available > 0n) ?? [];
 
   return (
-    <ScrollView keyboardShouldPersistTaps="handled">
+    <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
       <Header title="Claim payback" onBack={nav.back} />
 
       <Text style={[styles.muted, { marginBottom: 8 }]}>Asset</Text>
